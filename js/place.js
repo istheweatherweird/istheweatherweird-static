@@ -1,27 +1,70 @@
 // Parse CSV
-d3.csv("/Users/jonah/repos/is\ the\ weather\ weird/website/static/csvs/chicago/1214.csv")
-  .row(function(d) { return {year: d.year, max: d.high, min: d.low}})
-  .get(function(error, rows) { console.log(rows); });
 
-var forecast = {
-  min: 81.3,
-  max: 84.5
-}
+
+
+
+d3.json("https://api.weather.gov/stations/KORD/observations?start=2018-12-14T00:00:00-06:00", function(error,response) {
+  var observedTemps = response.features.map(function(d) { return d.properties.temperature.value * 1.8 + 32 });
+  var lonlat = response.features[0].geometry.coordinates
+  d3.json("https://api.weather.gov/points/" + lonlat[1] + "," + lonlat[0] + "/forecast/hourly", function(error,response) {
+    period = response.properties.periods;
+    var forecastHours = 24-period[0].startTime.substring(11,13)
+    var forecastTemps = period.slice(0,24-period[0].startTime.substring(11,13)).map(function(d) { return d.temperature });
+    var temps = observedTemps.concat(forecastTemps)
+    var todayLow = d3.min(temps)
+    var todayHigh = d3.max(temps)
+  d3.csv("../csvs/chicago/1214.csv")
+    .row(function(d) { return {year: d.year, max: d.high, min: d.low}})
+    .get(function(error, past) { 
+
+    var maxTemps = past.map(function(d) { return parseFloat(d.max) })
+    var minTemps = past.map(function(d) { return parseFloat(d.min) })
+
+    // make histograms
+    var highWeird = makeHist("maxGraphWrapper", todayHigh, maxTemps, " highs in Chicago", "max", past)
+    var lowWeird = makeHist("minGraphWrapper", todayLow, minTemps, " lows in Chicago", "min", past)  
+      
+    // make weird statement
+    if (lowWeird || highWeird) {
+      $("#weird").html("YES")
+    } else {
+      $("#weird").html("NO")          
+    }
+  });
+  });   
+})
+
+// // Docs at http://simpleweatherjs.com
+// $(document).ready(function() {
+//   $.simpleWeather({
+//     location: 'Chicago, IL',
+//     woeid: '',
+//     unit: 'f',
+//     success: function(weather) {
+
+//
+//     },
+//     error: function(error) {
+//       $("#weather").html('<p>'+error+'</p>');
+//     }
+//   });
+// });
+
+
+
 // var past = gon.past //
-var past = d3.range(50).map(function(d) { return {
-  year: 1967 + d,
-  max: 32 + 1.8 * (d3.random.bates(10)() * 21 + 20),
-  min: 32 + 1.8 * (d3.random.bates(10)() * 19 + 20)
-}});
-var maxTemps = past.map(function(d) { return parseFloat(d.max) })
-var minTemps = past.map(function(d) { return parseFloat(d.min) })
+// var past = d3.range(50).map(function(d) { return {
+//   year: 1967 + d,
+//   max: 32 + 1.8 * (d3.random.bates(10)() * 21 + 20),
+//   min: 32 + 1.8 * (d3.random.bates(10)() * 19 + 20)
+// }});
 // var maxTemps = d3.range(50).map(function() { return 32 + 1.8 * (d3.random.bates(10)() * 20 + 20) });
 // var minTemps = d3.range(50).map(function() { return 32 + 1.8 * (d3.random.bates(10)() * 20 + 20) });
 // var years = d3.range(50).map(function() { return })
 
 data = 3
 
-var makeHist = function(wrapperId, value, temps, title, key) {
+var makeHist = function(wrapperId, value, temps, title, key, past) {
     // A formatter for counts.
     var formatCount = d3.format(",.0f");
 
@@ -125,10 +168,14 @@ var makeHist = function(wrapperId, value, temps, title, key) {
         .attr("x", width/2)
         .attr("text-anchor", "middle")
         .style("font-size", "20px")
-        .text(title + Date().substring(4,10));
+        .text(Date().substring(4,10) + title);
     
+  return isweird(temps,value)
 }
 
-
-makeHist("maxGraphWrapper", forecast.max, maxTemps, "Daily high temperatures for ", "max")
-makeHist("minGraphWrapper", forecast.min, minTemps, "Daily low temperatures for ", "min")
+var isweird = function(vs,value) {
+  var totalYears = vs.length
+  above = vs.filter(d => d > value).length / totalYears
+  below = vs.filter(d => d < value).length / totalYears
+  return ((above < .1) || (below < .1))
+}
